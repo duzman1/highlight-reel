@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,15 +6,12 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { api } from '../../../lib/api';
-import { supabase } from '../../../lib/supabase';
-import type { Video, VideoUploadResponse } from '@highlight-reel/shared';
-import { VIDEO_LIMITS } from '@highlight-reel/shared';
+import type { Video } from '@highlight-reel/shared';
+import { useVideoUpload } from '../../../hooks/useVideoUpload';
 
 const STATUS_COLORS: Record<string, string> = {
   uploading: '#f59e0b',
@@ -35,84 +32,51 @@ const STATUS_LABELS: Record<string, string> = {
 export default function VideosScreen() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadVideos = useCallback(async () => {
     try {
       const { videos: data } = await api.get<{ videos: Video[] }>('/api/videos');
       setVideos(data);
+
+      // Auto-poll if any videos are processing
+      const hasProcessing = data.some(
+        (v) => v.status === 'processing' || v.status === 'uploaded'
+      );
+
+      if (hasProcessing && !pollRef.current) {
+        pollRef.current = setInterval(async () => {
+          try {
+            const { videos: updated } = await api.get<{ videos: Video[] }>('/api/videos');
+            setVideos(updated);
+            const still = updated.some(
+              (v) => v.status === 'processing' || v.status === 'uploaded'
+            );
+            if (!still && pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+          } catch {}
+        }, 5000);
+      }
     } catch {
       // Handle silently on initial load
     }
   }, []);
 
+  const { isUploading, progress, pickAndUpload } = useVideoUpload(loadVideos);
+
   useEffect(() => {
     loadVideos();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [loadVideos]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadVideos();
     setRefreshing(false);
-  };
-
-  const pickAndUploadVideo = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          'Permission Required',
-          'Please grant access to your photo library to upload videos.'
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['videos'],
-        quality: 1,
-        videoMaxDuration: VIDEO_LIMITS.MAX_DURATION_MINUTES * 60,
-      });
-
-      if (result.canceled || !result.assets[0]) return;
-
-      const asset = result.assets[0];
-      setUploading(true);
-
-      // 1. Get pre-signed upload URL from API
-      const fileName = asset.uri.split('/').pop() || 'video.mp4';
-      const { video_id, upload_url } = await api.post<VideoUploadResponse>(
-        '/api/videos/upload-url',
-        {
-          file_name: fileName,
-          file_size: asset.fileSize || 0,
-          mime_type: asset.mimeType || 'video/mp4',
-        }
-      );
-
-      // 2. Upload the file directly to storage
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
-
-      await fetch(upload_url, {
-        method: 'PUT',
-        body: blob,
-        headers: {
-          'Content-Type': asset.mimeType || 'video/mp4',
-        },
-      });
-
-      // 3. Mark the video as uploaded
-      await api.patch(`/api/videos/${video_id}/status`, {
-        status: 'uploaded',
-      });
-
-      Alert.alert('Upload Complete', 'Your video has been uploaded successfully!');
-      await loadVideos();
-    } catch (error: any) {
-      Alert.alert('Upload Failed', error.message || 'Something went wrong');
-    } finally {
-      setUploading(false);
-    }
   };
 
   const formatDuration = (seconds: number | null) => {
@@ -197,13 +161,25 @@ export default function VideosScreen() {
         }
       />
 
+      {/* Upload Progress Bar */}
+      {isUploading && (
+        <View style={styles.uploadBar}>
+          <View style={styles.uploadBarTrack}>
+            <View
+              style={[styles.uploadBarFill, { width: `${progress}%` }]}
+            />
+          </View>
+          <Text style={styles.uploadBarText}>Uploading... {progress}%</Text>
+        </View>
+      )}
+
       <TouchableOpacity
-        style={[styles.fab, uploading && styles.fabDisabled]}
-        onPress={pickAndUploadVideo}
-        disabled={uploading}
+        style={[styles.fab, isUploading && styles.fabDisabled]}
+        onPress={pickAndUpload}
+        disabled={isUploading}
       >
         <Ionicons
-          name={uploading ? 'hourglass' : 'add'}
+          name={isUploading ? 'hourglass' : 'add'}
           size={28}
           color="#fff"
         />
@@ -304,5 +280,33 @@ const styles = StyleSheet.create({
   },
   fabDisabled: {
     backgroundColor: '#666',
+  },
+  uploadBar: {
+    position: 'absolute',
+    bottom: 90,
+    left: 20,
+    right: 20,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a4a',
+  },
+  uploadBarTrack: {
+    height: 6,
+    backgroundColor: '#2a2a4a',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  uploadBarFill: {
+    height: '100%',
+    backgroundColor: '#e94560',
+    borderRadius: 3,
+  },
+  uploadBarText: {
+    color: '#8888aa',
+    fontSize: 12,
+    textAlign: 'center',
   },
 });

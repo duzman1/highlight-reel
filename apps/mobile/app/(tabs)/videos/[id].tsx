@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../../lib/api';
 import type { Video, Highlight } from '@highlight-reel/shared';
@@ -17,9 +18,14 @@ export default function VideoDetailScreen() {
   const [video, setVideo] = useState<Video | null>(null);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creatingReel, setCreatingReel] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     loadVideo();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [id]);
 
   const loadVideo = async () => {
@@ -29,6 +35,35 @@ export default function VideoDetailScreen() {
       }>(`/api/videos/${id}`);
       setVideo(data);
       setHighlights(data.highlights || []);
+
+      // Auto-poll if video is still processing
+      if (
+        (data.status === 'processing' || data.status === 'uploaded') &&
+        !pollRef.current
+      ) {
+        pollRef.current = setInterval(async () => {
+          try {
+            const { video: updated } = await api.get<{
+              video: Video & { highlights: Highlight[] };
+            }>(`/api/videos/${id}`);
+            setVideo(updated);
+            setHighlights(updated.highlights || []);
+
+            // Stop polling once processing is done
+            if (
+              updated.status !== 'processing' &&
+              updated.status !== 'uploaded'
+            ) {
+              if (pollRef.current) {
+                clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
+            }
+          } catch {
+            // Silently continue polling
+          }
+        }, 5000);
+      }
     } catch (error) {
       console.error('Failed to load video:', error);
     } finally {
@@ -50,6 +85,56 @@ export default function VideoDetailScreen() {
     }
   };
 
+  const acceptAll = async () => {
+    const pending = highlights.filter((h) => h.is_accepted === null);
+    try {
+      await api.post('/api/highlights/batch-update', {
+        updates: pending.map((h) => ({ id: h.id, is_accepted: true })),
+      });
+      setHighlights((prev) =>
+        prev.map((h) =>
+          h.is_accepted === null ? { ...h, is_accepted: true } : h
+        )
+      );
+    } catch (error) {
+      console.error('Failed to accept all:', error);
+    }
+  };
+
+  const createReel = async () => {
+    const accepted = highlights.filter((h) => h.is_accepted === true);
+    if (accepted.length === 0) {
+      Alert.alert('No Highlights', 'Accept at least one highlight to create a reel.');
+      return;
+    }
+
+    setCreatingReel(true);
+    try {
+      const { reel } = await api.post<{ reel: any }>('/api/reels', {
+        title: `${video?.title || 'Game'} Highlights`,
+        player_id: video?.player_id,
+        clips: accepted.map((h, i) => ({
+          highlight_id: h.id,
+          position: i,
+          transition_type: 'crossfade',
+        })),
+      });
+
+      Alert.alert(
+        'Reel Queued!',
+        'Your highlight reel is being generated. Check the Reels tab for progress.',
+        [
+          { text: 'Go to Reels', onPress: () => router.push('/(tabs)/reels') },
+          { text: 'Stay Here', style: 'cancel' },
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create reel');
+    } finally {
+      setCreatingReel(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -68,6 +153,8 @@ export default function VideoDetailScreen() {
 
   const acceptedCount = highlights.filter((h) => h.is_accepted).length;
   const pendingCount = highlights.filter((h) => h.is_accepted === null).length;
+  const isProcessing =
+    video.status === 'processing' || video.status === 'uploaded';
 
   return (
     <ScrollView style={styles.container}>
@@ -84,18 +171,52 @@ export default function VideoDetailScreen() {
         <Ionicons name="play-circle" size={64} color="#e94560" />
         <Text style={styles.playerText}>Video Player</Text>
         <Text style={styles.playerSubtext}>
-          (Video playback will be connected in Phase 4)
+          Video playback coming in Phase 4
         </Text>
       </View>
+
+      {/* Processing Banner */}
+      {isProcessing && (
+        <View style={styles.processingBanner}>
+          <ActivityIndicator size="small" color="#fff" />
+          <Text style={styles.processingText}>
+            {video.status === 'uploaded'
+              ? 'Queued for processing...'
+              : 'AI is analyzing your video...'}
+          </Text>
+        </View>
+      )}
+
+      {video.status === 'failed' && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="warning" size={18} color="#fff" />
+          <Text style={styles.errorBannerText}>
+            Processing failed: {video.processing_error || 'Unknown error'}
+          </Text>
+        </View>
+      )}
 
       {/* Video Info */}
       <View style={styles.section}>
         <Text style={styles.videoTitle}>{video.title || 'Untitled'}</Text>
-        {video.sport && (
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{video.sport}</Text>
-          </View>
-        )}
+        <View style={styles.metaRow}>
+          {video.sport && (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>{video.sport}</Text>
+            </View>
+          )}
+          {video.duration_seconds && (
+            <Text style={styles.metaText}>
+              {Math.floor(video.duration_seconds / 60)}:
+              {String(Math.floor(video.duration_seconds % 60)).padStart(2, '0')}
+            </Text>
+          )}
+          {video.width && video.height && (
+            <Text style={styles.metaText}>
+              {video.width}x{video.height}
+            </Text>
+          )}
+        </View>
       </View>
 
       {/* Highlights Section */}
@@ -107,13 +228,21 @@ export default function VideoDetailScreen() {
           </Text>
         </View>
 
+        {/* Quick Actions */}
+        {highlights.length > 0 && pendingCount > 0 && (
+          <TouchableOpacity style={styles.acceptAllBtn} onPress={acceptAll}>
+            <Ionicons name="checkmark-done" size={18} color="#10b981" />
+            <Text style={styles.acceptAllText}>Accept All ({pendingCount})</Text>
+          </TouchableOpacity>
+        )}
+
         {highlights.length === 0 ? (
           <View style={styles.emptyHighlights}>
             <Ionicons name="sparkles-outline" size={32} color="#4a4a6a" />
             <Text style={styles.emptyText}>
               {video.status === 'analyzed'
                 ? 'No highlights detected. Try adding them manually.'
-                : video.status === 'processing'
+                : isProcessing
                 ? 'AI is analyzing your video...'
                 : 'Upload and process your video to detect highlights.'}
             </Text>
@@ -171,10 +300,31 @@ export default function VideoDetailScreen() {
 
         {pendingCount > 0 && (
           <Text style={styles.pendingNote}>
-            {pendingCount} highlight{pendingCount > 1 ? 's' : ''} pending review
+            {pendingCount} highlight{pendingCount > 1 ? 's' : ''} pending
+            review
           </Text>
         )}
       </View>
+
+      {/* Create Reel Button */}
+      {acceptedCount > 0 && (
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.reelButton, creatingReel && styles.reelButtonDisabled]}
+            onPress={createReel}
+            disabled={creatingReel}
+          >
+            <Ionicons name="film" size={22} color="#fff" />
+            <Text style={styles.reelButtonText}>
+              {creatingReel
+                ? 'Creating Reel...'
+                : `Create Reel (${acceptedCount} clip${acceptedCount > 1 ? 's' : ''})`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -218,6 +368,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  processingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#8b5cf6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  processingText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#ef4444',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  errorBannerText: {
+    color: '#fff',
+    fontSize: 13,
+    flex: 1,
+  },
   section: {
     padding: 20,
   },
@@ -227,8 +405,16 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 8,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  metaText: {
+    fontSize: 13,
+    color: '#8888aa',
+  },
   tag: {
-    alignSelf: 'flex-start',
     backgroundColor: '#2a2a4a',
     borderRadius: 8,
     paddingHorizontal: 12,
@@ -243,7 +429,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 18,
@@ -253,6 +439,23 @@ const styles = StyleSheet.create({
   sectionCount: {
     fontSize: 13,
     color: '#8888aa',
+  },
+  acceptAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-end',
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  acceptAllText: {
+    color: '#10b981',
+    fontSize: 13,
+    fontWeight: '600',
   },
   highlightCard: {
     flexDirection: 'row',
@@ -319,5 +522,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     marginTop: 8,
+  },
+  reelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#e94560',
+    borderRadius: 14,
+    paddingVertical: 16,
+  },
+  reelButtonDisabled: {
+    opacity: 0.6,
+  },
+  reelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
