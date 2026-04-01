@@ -6,9 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { useLocalSearchParams, Stack, router } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../../lib/api';
 import { supabase } from '../../../lib/supabase';
@@ -17,6 +16,8 @@ import { HighlightTimeline } from '../../../components/highlights/HighlightTimel
 import { HighlightScrubber } from '../../../components/highlights/HighlightScrubber';
 import { HighlightTagger } from '../../../components/highlights/HighlightTagger';
 import { HighlightCard } from '../../../components/highlights/HighlightCard';
+import { ReelBuilder } from '../../../components/reels/ReelBuilder';
+import { ReelPreview } from '../../../components/reels/ReelPreview';
 import type { Video, Highlight } from '@highlight-reel/shared';
 import { STORAGE_BUCKETS } from '@highlight-reel/shared';
 
@@ -26,7 +27,7 @@ export default function VideoDetailScreen() {
   const [video, setVideo] = useState<Video | null>(null);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creatingReel, setCreatingReel] = useState(false);
+  const [showReelBuilder, setShowReelBuilder] = useState(false);
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [currentPositionMs, setCurrentPositionMs] = useState(0);
   const [videoDurationMs, setVideoDurationMs] = useState(0);
@@ -125,40 +126,6 @@ export default function VideoDetailScreen() {
     await playerRef.current?.seekTo(positionMs);
     await playerRef.current?.play();
   }, []);
-
-  const createReel = async () => {
-    const accepted = highlights.filter((h) => h.is_accepted === true);
-    if (accepted.length === 0) {
-      Alert.alert('No Highlights', 'Accept at least one highlight to create a reel.');
-      return;
-    }
-
-    setCreatingReel(true);
-    try {
-      await api.post('/api/reels', {
-        title: `${video?.title || 'Game'} Highlights`,
-        player_id: video?.player_id,
-        clips: accepted.map((h, i) => ({
-          highlight_id: h.id,
-          position: i,
-          transition_type: 'crossfade',
-        })),
-      });
-
-      Alert.alert(
-        'Reel Queued!',
-        'Your highlight reel is being generated. Check the Reels tab for progress.',
-        [
-          { text: 'Go to Reels', onPress: () => router.push('/(tabs)/reels') },
-          { text: 'Stay Here', style: 'cancel' },
-        ]
-      );
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create reel');
-    } finally {
-      setCreatingReel(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -349,21 +316,40 @@ export default function VideoDetailScreen() {
       </View>
 
       {/* Create Reel Button */}
-      {acceptedCount > 0 && (
+      {acceptedCount > 0 && !showReelBuilder && (
         <View style={styles.section}>
           <TouchableOpacity
-            style={[styles.reelButton, creatingReel && styles.reelButtonDisabled]}
-            onPress={createReel}
-            disabled={creatingReel}
+            style={styles.reelButton}
+            onPress={() => setShowReelBuilder(true)}
           >
             <Ionicons name="film" size={22} color="#fff" />
             <Text style={styles.reelButtonText}>
-              {creatingReel
-                ? 'Creating Reel...'
-                : `Create Reel (${acceptedCount} clip${acceptedCount > 1 ? 's' : ''})`}
+              Build Reel ({acceptedCount} clip{acceptedCount > 1 ? 's' : ''})
             </Text>
           </TouchableOpacity>
         </View>
+      )}
+
+      {/* Reel Builder */}
+      {showReelBuilder && video && (
+        <>
+          <ReelPreview
+            clips={highlights
+              .filter((h) => h.is_accepted === true)
+              .map((h, i) => ({
+                highlight: h,
+                position: i,
+                transition_type: 'crossfade' as const,
+              }))}
+            onSeek={seekTo}
+          />
+          <ReelBuilder
+            video={video}
+            highlights={highlights}
+            onSeek={seekTo}
+            onClose={() => setShowReelBuilder(false)}
+          />
+        </>
       )}
 
       <View style={{ height: 40 }} />
@@ -518,9 +504,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#e94560',
     borderRadius: 14,
     paddingVertical: 16,
-  },
-  reelButtonDisabled: {
-    opacity: 0.6,
   },
   reelButtonText: {
     color: '#fff',

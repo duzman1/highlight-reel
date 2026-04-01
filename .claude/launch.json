@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Expo Mobile App",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start"],
+      "port": 8081
+    },
+    {
+      "name": "API Server (Fastify)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "watch", "services/api/src/server.ts"],
+      "port": 3001
+    },
+    {
+      "name": "AI Service (FastAPI)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "src.main:app", "--reload", "--port", "8001"],
+      "port": 8001
+    },
+    {
+      "name": "Redis (Docker)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "infra/docker-compose.yml", "up", "redis"],
+      "port": 6379
+    }
+  ]
+}
