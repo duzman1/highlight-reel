@@ -1,0 +1,22 @@
+{
+  "name": "highlight-reel",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run dev --workspace=apps/mobile",
+    "dev:api": "npm run dev --workspace=services/api",
+    "dev:ai": "cd services/ai && uvicorn src.main:app --reload --port 8001",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  }
+}
