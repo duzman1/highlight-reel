@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,102 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
+import { api } from '../../../lib/api';
+import type { Reel } from '@highlight-reel/shared';
+
+const STATUS_CONFIG: Record<
+  string,
+  { color: string; label: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  pending: { color: '#f59e0b', label: 'Queued', icon: 'hourglass' },
+  processing: { color: '#8b5cf6', label: 'Generating...', icon: 'cog' },
+  ready: { color: '#10b981', label: 'Ready', icon: 'checkmark-circle' },
+  failed: { color: '#ef4444', label: 'Failed', icon: 'alert-circle' },
+};
 
 export default function ReelsScreen() {
-  const [reels, setReels] = useState<any[]>([]);
+  const [reels, setReels] = useState<Reel[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadReels = useCallback(async () => {
+    try {
+      const { reels: data } = await api.get<{ reels: Reel[] }>('/api/reels');
+      setReels(data);
+
+      // Auto-poll if any reels are still processing
+      const hasProcessing = data.some(
+        (r) => r.status === 'pending' || r.status === 'processing'
+      );
+
+      if (hasProcessing && !pollRef.current) {
+        pollRef.current = setInterval(async () => {
+          try {
+            const { reels: updated } = await api.get<{ reels: Reel[] }>(
+              '/api/reels'
+            );
+            setReels(updated);
+
+            const stillProcessing = updated.some(
+              (r) => r.status === 'pending' || r.status === 'processing'
+            );
+            if (!stillProcessing && pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+          } catch {
+            // Continue polling
+          }
+        }, 5000);
+      } else if (!hasProcessing && pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    } catch {
+      // Handle silently
+    }
+  }, []);
+
+  useEffect(() => {
+    loadReels();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [loadReels]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // TODO: Load reels from API (Phase 5)
+    await loadReels();
     setRefreshing(false);
+  };
+
+  const deleteReel = (reel: Reel) => {
+    Alert.alert('Delete Reel', `Delete "${reel.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(`/api/reels/${reel.id}`);
+            await loadReels();
+          } catch (error: any) {
+            Alert.alert('Error', error.message);
+          }
+        },
+      },
+    ]);
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -42,7 +126,7 @@ export default function ReelsScreen() {
             <Ionicons name="film-outline" size={64} color="#2a2a4a" />
             <Text style={styles.emptyTitle}>No Reels Yet</Text>
             <Text style={styles.emptyText}>
-              Upload a video and review highlights to create your first reel
+              Upload a video, review highlights, and create your first reel
             </Text>
             <TouchableOpacity
               style={styles.emptyButton}
@@ -52,17 +136,37 @@ export default function ReelsScreen() {
             </TouchableOpacity>
           </View>
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.reelCard}>
-            <View style={styles.reelThumb}>
-              <Ionicons name="film" size={28} color="#4a4a6a" />
-            </View>
-            <View style={styles.reelInfo}>
-              <Text style={styles.reelTitle}>{item.title}</Text>
-              <Text style={styles.reelMeta}>{item.status}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const status = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
+          return (
+            <TouchableOpacity
+              style={styles.reelCard}
+              onPress={() => router.push(`/(tabs)/reels/${item.id}`)}
+              onLongPress={() => deleteReel(item)}
+            >
+              <View style={styles.reelThumb}>
+                <Ionicons name="film" size={28} color="#4a4a6a" />
+              </View>
+              <View style={styles.reelInfo}>
+                <Text style={styles.reelTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <View style={styles.statusRow}>
+                  <Ionicons name={status.icon} size={14} color={status.color} />
+                  <Text style={[styles.statusText, { color: status.color }]}>
+                    {status.label}
+                  </Text>
+                  {item.duration_seconds && (
+                    <Text style={styles.durationText}>
+                      {formatDuration(item.duration_seconds)}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#4a4a6a" />
+            </TouchableOpacity>
+          );
+        }}
       />
     </View>
   );
@@ -131,10 +235,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#ffffff',
+    marginBottom: 4,
   },
-  reelMeta: {
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  durationText: {
     fontSize: 12,
     color: '#8888aa',
-    marginTop: 4,
+    marginLeft: 8,
   },
 });

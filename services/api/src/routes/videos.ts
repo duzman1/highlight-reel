@@ -3,6 +3,7 @@ import { videoUploadSchema, videoUpdateSchema } from '@highlight-reel/shared';
 import { requireAuth, supabaseAdmin } from '../middleware/auth';
 import { STORAGE_BUCKETS } from '@highlight-reel/shared';
 import { randomUUID } from 'crypto';
+import { enqueueVideoAnalysis } from '../services/queue.service';
 
 export async function videoRoutes(fastify: FastifyInstance) {
   // All video routes require auth
@@ -107,7 +108,18 @@ export async function videoRoutes(fastify: FastifyInstance) {
 
       if (error) throw new Error(error.message);
 
-      // TODO: Enqueue video processing job in BullMQ (Phase 3)
+      // Enqueue video for AI analysis
+      try {
+        await enqueueVideoAnalysis({
+          videoId: id,
+          userId: user.id,
+          storagePath: data.storage_path,
+          storageBucket: data.storage_bucket,
+        });
+      } catch (queueError: any) {
+        // Queue failure is non-fatal — video is still uploaded
+        console.warn('Failed to enqueue video analysis:', queueError.message);
+      }
 
       return { video: data };
     }

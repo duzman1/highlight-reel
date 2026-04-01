@@ -4,6 +4,7 @@ import { errorHandler } from './middleware/error-handler';
 import { videoRoutes } from './routes/videos';
 import { userRoutes } from './routes/users';
 import { highlightRoutes } from './routes/highlights';
+import { reelRoutes } from './routes/reels';
 
 export async function buildApp() {
   const app = Fastify({
@@ -32,6 +33,7 @@ export async function buildApp() {
   app.register(videoRoutes, { prefix: '/api/videos' });
   app.register(userRoutes, { prefix: '/api/users' });
   app.register(highlightRoutes, { prefix: '/api/highlights' });
+  app.register(reelRoutes, { prefix: '/api/reels' });
 
   return app;
 }
