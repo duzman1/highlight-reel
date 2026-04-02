@@ -26,14 +26,15 @@ const STATUS_CONFIG: Record<
 export default function ReelsScreen() {
   const [reels, setReels] = useState<Reel[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadReels = useCallback(async () => {
     try {
+      setError(null);
       const { reels: data } = await api.get<{ reels: Reel[] }>('/api/reels');
       setReels(data);
 
-      // Auto-poll if any reels are still processing
       const hasProcessing = data.some(
         (r) => r.status === 'pending' || r.status === 'processing'
       );
@@ -53,16 +54,14 @@ export default function ReelsScreen() {
               clearInterval(pollRef.current);
               pollRef.current = null;
             }
-          } catch {
-            // Continue polling
-          }
+          } catch {}
         }, 5000);
       } else if (!hasProcessing && pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-    } catch {
-      // Handle silently
+    } catch (err: any) {
+      setError(err.message || 'Failed to load reels');
     }
   }, []);
 
@@ -121,20 +120,31 @@ export default function ReelsScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="film-outline" size={64} color="#2a2a4a" />
-            <Text style={styles.emptyTitle}>No Reels Yet</Text>
-            <Text style={styles.emptyText}>
-              Upload a video, review highlights, and create your first reel
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => router.push('/(tabs)/videos')}
-            >
-              <Text style={styles.emptyButtonText}>Go to Videos</Text>
+        ListHeaderComponent={
+          error ? (
+            <TouchableOpacity style={styles.errorBanner} onPress={loadReels}>
+              <Ionicons name="warning-outline" size={18} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
-          </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          error ? null : (
+            <View style={styles.empty}>
+              <Ionicons name="film-outline" size={64} color="#2a2a4a" />
+              <Text style={styles.emptyTitle}>No Reels Yet</Text>
+              <Text style={styles.emptyText}>
+                Upload a video, review highlights, and create your first reel
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyButton}
+                onPress={() => router.push('/(tabs)/videos')}
+              >
+                <Text style={styles.emptyButtonText}>Go to Videos</Text>
+              </TouchableOpacity>
+            </View>
+          )
         }
         renderItem={({ item }) => {
           const status = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
@@ -142,7 +152,6 @@ export default function ReelsScreen() {
             <TouchableOpacity
               style={styles.reelCard}
               onPress={() => router.push(`/(tabs)/reels/${item.id}`)}
-              onLongPress={() => deleteReel(item)}
             >
               <View style={styles.reelThumb}>
                 <Ionicons name="film" size={28} color="#4a4a6a" />
@@ -163,7 +172,13 @@ export default function ReelsScreen() {
                   )}
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#4a4a6a" />
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => deleteReel(item)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+              </TouchableOpacity>
             </TouchableOpacity>
           );
         }}
@@ -250,5 +265,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8888aa',
     marginLeft: 8,
+  },
+  deleteBtn: {
+    padding: 8,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  errorText: {
+    flex: 1,
+    color: '#ef4444',
+    fontSize: 13,
+  },
+  retryText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

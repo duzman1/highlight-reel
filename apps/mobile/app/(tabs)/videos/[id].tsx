@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +34,7 @@ export default function VideoDetailScreen() {
   const [videoDurationMs, setVideoDurationMs] = useState(0);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
   const [showTagger, setShowTagger] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -122,6 +124,12 @@ export default function VideoDetailScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadVideo();
+    setRefreshing(false);
+  };
+
   const seekTo = useCallback(async (positionMs: number) => {
     await playerRef.current?.seekTo(positionMs);
     await playerRef.current?.play();
@@ -149,7 +157,12 @@ export default function VideoDetailScreen() {
     video.status === 'processing' || video.status === 'uploaded';
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <Stack.Screen
         options={{
           title: video.title || 'Video Details',

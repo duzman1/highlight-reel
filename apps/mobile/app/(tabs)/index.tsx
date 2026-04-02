@@ -28,18 +28,20 @@ export default function HomeScreen() {
     recentVideos: [],
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadStats = async () => {
     try {
+      setError(null);
       const { videos } = await api.get<{ videos: any[] }>('/api/videos');
       setStats({
         totalVideos: videos.length,
-        totalHighlights: 0, // Will populate when highlights exist
+        totalHighlights: 0,
         totalReels: 0,
         recentVideos: videos.slice(0, 3),
       });
-    } catch {
-      // Silently handle - user may not have any data yet
+    } catch (err: any) {
+      setError(err.message || 'Failed to load stats');
     }
   };
 
@@ -68,6 +70,15 @@ export default function HomeScreen() {
         <Text style={styles.greetingText}>Welcome back,</Text>
         <Text style={styles.nameText}>{displayName}!</Text>
       </View>
+
+      {/* Error Banner */}
+      {error && (
+        <TouchableOpacity style={styles.errorBanner} onPress={loadStats}>
+          <Ionicons name="warning-outline" size={18} color="#fff" />
+          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.retryText}>Tap to retry</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
@@ -222,6 +233,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8888aa',
     marginTop: 4,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  errorText: {
+    flex: 1,
+    color: '#ef4444',
+    fontSize: 13,
+  },
+  retryText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
   guide: {
     backgroundColor: '#1a1a2e',

@@ -3,8 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  RefreshControl,
   Alert,
   Share,
 } from 'react-native';
@@ -24,6 +26,7 @@ export default function ReelDetailScreen() {
   );
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -67,6 +70,12 @@ export default function ReelDetailScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadReel();
+    setRefreshing(false);
   };
 
   const downloadReel = async () => {
@@ -125,7 +134,12 @@ export default function ReelDetailScreen() {
     reel.status === 'pending' || reel.status === 'processing';
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <Stack.Screen
         options={{
           title: reel.title || 'Reel',
@@ -208,7 +222,7 @@ export default function ReelDetailScreen() {
           </Text>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
