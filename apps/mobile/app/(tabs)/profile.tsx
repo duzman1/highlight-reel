@@ -39,39 +39,39 @@ export default function ProfileScreen() {
 
       {/* Menu Items */}
       <View style={styles.menu}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="person-outline" size={22} color="#8888aa" />
-          <Text style={styles.menuText}>Edit Profile</Text>
-          <Ionicons name="chevron-forward" size={18} color="#4a4a6a" />
-        </TouchableOpacity>
+        <View style={styles.menuItem}>
+          <Ionicons name="person-outline" size={22} color="#4a4a6a" />
+          <Text style={styles.menuTextDisabled}>Edit Profile</Text>
+          <Text style={styles.comingSoon}>Coming Soon</Text>
+        </View>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="notifications-outline" size={22} color="#8888aa" />
-          <Text style={styles.menuText}>Notifications</Text>
-          <Ionicons name="chevron-forward" size={18} color="#4a4a6a" />
-        </TouchableOpacity>
+        <View style={styles.menuItem}>
+          <Ionicons name="notifications-outline" size={22} color="#4a4a6a" />
+          <Text style={styles.menuTextDisabled}>Notifications</Text>
+          <Text style={styles.comingSoon}>Coming Soon</Text>
+        </View>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="cloud-outline" size={22} color="#8888aa" />
-          <Text style={styles.menuText}>Storage</Text>
-          <Ionicons name="chevron-forward" size={18} color="#4a4a6a" />
-        </TouchableOpacity>
+        <View style={styles.menuItem}>
+          <Ionicons name="cloud-outline" size={22} color="#4a4a6a" />
+          <Text style={styles.menuTextDisabled}>Storage</Text>
+          <Text style={styles.comingSoon}>Coming Soon</Text>
+        </View>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="help-circle-outline" size={22} color="#8888aa" />
-          <Text style={styles.menuText}>Help & Support</Text>
-          <Ionicons name="chevron-forward" size={18} color="#4a4a6a" />
-        </TouchableOpacity>
+        <View style={styles.menuItem}>
+          <Ionicons name="help-circle-outline" size={22} color="#4a4a6a" />
+          <Text style={styles.menuTextDisabled}>Help & Support</Text>
+          <Text style={styles.comingSoon}>Coming Soon</Text>
+        </View>
 
-        <TouchableOpacity style={styles.menuItem}>
+        <View style={styles.menuItem}>
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color="#8888aa"
+            color="#4a4a6a"
           />
-          <Text style={styles.menuText}>About</Text>
-          <Ionicons name="chevron-forward" size={18} color="#4a4a6a" />
-        </TouchableOpacity>
+          <Text style={styles.menuTextDisabled}>About</Text>
+          <Text style={styles.comingSoon}>Coming Soon</Text>
+        </View>
       </View>
 
       {/* Sign Out */}
@@ -136,6 +136,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffffff',
     marginLeft: 14,
+  },
+  menuTextDisabled: {
+    flex: 1,
+    fontSize: 16,
+    color: '#4a4a6a',
+    marginLeft: 14,
+  },
+  comingSoon: {
+    fontSize: 11,
+    color: '#4a4a6a',
+    fontWeight: '600',
   },
   signOutButton: {
     flexDirection: 'row',

@@ -32,10 +32,12 @@ const STATUS_LABELS: Record<string, string> = {
 export default function VideosScreen() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadVideos = useCallback(async () => {
     try {
+      setError(null);
       const { videos: data } = await api.get<{ videos: Video[] }>('/api/videos');
       setVideos(data);
 
@@ -59,8 +61,8 @@ export default function VideosScreen() {
           } catch {}
         }, 5000);
       }
-    } catch {
-      // Handle silently on initial load
+    } catch (err: any) {
+      setError(err.message || 'Failed to load videos');
     }
   }, []);
 
@@ -150,14 +152,25 @@ export default function VideosScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        ListHeaderComponent={
+          error ? (
+            <TouchableOpacity style={styles.errorBanner} onPress={loadVideos}>
+              <Ionicons name="warning-outline" size={18} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          ) : null
+        }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="videocam-outline" size={64} color="#2a2a4a" />
-            <Text style={styles.emptyTitle}>No Videos Yet</Text>
-            <Text style={styles.emptyText}>
-              Upload your first game video to get started
-            </Text>
-          </View>
+          error ? null : (
+            <View style={styles.empty}>
+              <Ionicons name="videocam-outline" size={64} color="#2a2a4a" />
+              <Text style={styles.emptyTitle}>No Videos Yet</Text>
+              <Text style={styles.emptyText}>
+                Upload your first game video to get started
+              </Text>
+            </View>
+          )
         }
       />
 
@@ -246,6 +259,27 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     color: '#8888aa',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  errorText: {
+    flex: 1,
+    color: '#ef4444',
+    fontSize: 13,
+  },
+  retryText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
   empty: {
     alignItems: 'center',

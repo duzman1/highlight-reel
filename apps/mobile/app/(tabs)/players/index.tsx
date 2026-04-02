@@ -27,14 +27,18 @@ export default function PlayersScreen() {
     jersey_number: '',
   });
 
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const loadPlayers = useCallback(async () => {
     try {
+      setError(null);
       const { players: data } = await api.get<{ players: Player[] }>(
         '/api/users/me/players'
       );
       setPlayers(data);
-    } catch {
-      // Handle silently
+    } catch (err: any) {
+      setError(err.message || 'Failed to load players');
     }
   }, []);
 
@@ -54,6 +58,7 @@ export default function PlayersScreen() {
       return;
     }
 
+    setSaving(true);
     try {
       await api.post('/api/users/me/players', {
         name: newPlayer.name.trim(),
@@ -66,6 +71,8 @@ export default function PlayersScreen() {
       await loadPlayers();
     } catch (error: any) {
       Alert.alert('Error', error.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -108,20 +115,28 @@ export default function PlayersScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        ListHeaderComponent={
+          error ? (
+            <TouchableOpacity style={styles.errorBanner} onPress={loadPlayers}>
+              <Ionicons name="warning-outline" size={18} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          ) : null
+        }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="people-outline" size={64} color="#2a2a4a" />
-            <Text style={styles.emptyTitle}>No Players Yet</Text>
-            <Text style={styles.emptyText}>
-              Add your child to start organizing their game videos
-            </Text>
-          </View>
+          error ? null : (
+            <View style={styles.empty}>
+              <Ionicons name="people-outline" size={64} color="#2a2a4a" />
+              <Text style={styles.emptyTitle}>No Players Yet</Text>
+              <Text style={styles.emptyText}>
+                Add your child to start organizing their game videos
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.playerCard}
-            onLongPress={() => deletePlayer(item)}
-          >
+          <View style={styles.playerCard}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
                 {item.name.charAt(0).toUpperCase()}
@@ -141,7 +156,14 @@ export default function PlayersScreen() {
                 )}
               </View>
             </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => deletePlayer(item)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="trash-outline" size={18} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
         )}
       />
 
@@ -177,7 +199,7 @@ export default function PlayersScreen() {
 
             <Text style={styles.label}>Sport</Text>
             <View style={styles.sportGrid}>
-              {SPORTS.slice(0, 6).map((sport) => (
+              {SPORTS.map((sport) => (
                 <TouchableOpacity
                   key={sport.value}
                   style={[
@@ -228,8 +250,14 @@ export default function PlayersScreen() {
               keyboardType="number-pad"
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={addPlayer}>
-              <Text style={styles.saveButtonText}>Add Player</Text>
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={addPlayer}
+              disabled={saving}
+            >
+              <Text style={styles.saveButtonText}>
+                {saving ? 'Adding...' : 'Add Player'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -392,9 +420,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
   saveButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  deleteBtn: {
+    padding: 8,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  errorText: {
+    flex: 1,
+    color: '#ef4444',
+    fontSize: 13,
+  },
+  retryText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
