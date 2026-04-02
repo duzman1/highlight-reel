@@ -3,9 +3,16 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": ["./*"],
-      "@highlight-reel/shared": ["../../packages/shared/src"]
+      "@/*": [
+        "./*"
+      ],
+      "@highlight-reel/shared": [
+        "../../packages/shared/src"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ]
 }

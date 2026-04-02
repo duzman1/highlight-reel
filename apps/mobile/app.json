@@ -56,7 +56,8 @@
         {
           "photosPermission": "Allow HighlightReel to access your videos to create highlights."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
